@@ -63,11 +63,10 @@ impl WidgetTree {
     /// with the specified concrete type `T`, returning the first one found.  If no such
     /// widget is found, panics.  Panics if `index` is invalid
     pub fn parent_mut<'a, T: Widget + 'static>(&'a mut self, index: usize) -> &'a mut T {
-        let index = self.tree(index).parent;
+        let mut index = self.tree(index).parent;
         loop {
-            match self[index].as_any_mut().downcast_mut::<T>() {
-                None => (),
-                Some(widget) => return widget,
+            if let Some(_) = self[index].as_any_mut().downcast_mut::<T>() {
+                break;
             }
 
             let new_index = self.tree(index).parent;
@@ -76,14 +75,19 @@ impl WidgetTree {
                 // this widget is its own parent, i.e. the root
                 panic!();
             }
+            index = new_index;
         }
+
+        // TODO not sure why putting this directly in the loop causes a borrow checker problem
+        let widget = &mut self[index];
+        widget.as_any_mut().downcast_mut::<T>().unwrap()
     }
 
     /// Traverses the widget tree up, starting from the parent of `index` looking for a widget
     /// with the specified concrete type `T`, returning the first one found.  If no such
     /// widget is found, panics.  Panics if `index` is invalid
     pub fn parent<T: Widget + 'static>(&self, index: usize) -> &T {
-        let index = self.tree(index).parent;
+        let mut index = self.tree(index).parent;
         loop {
             match self[index].as_any().downcast_ref::<T>() {
                 None => (),
@@ -96,6 +100,7 @@ impl WidgetTree {
                 // this widget is its own parent, i.e. the root
                 panic!();
             }
+            index = new_index;
         }
     }
 

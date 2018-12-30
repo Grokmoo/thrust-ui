@@ -14,22 +14,35 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
+use std::any::Any;
+use std::rc::Rc;
+
+use crate::widget_tree::WidgetTree;
 use crate::image::Image;
 use crate::input::{Cursor, MouseButton};
 
+#[derive(Clone)]
 pub struct Callback<T> {
-    callback: Box<Fn(&mut T)>,
+    callback: Rc<Fn(&mut WidgetTree, usize, T) -> bool>,
 }
 
 impl<T> Callback<T> {
-    pub fn new(cb: Box<Fn(&mut T)>) -> Callback<T> {
+    pub fn new(cb: Rc<Fn(&mut WidgetTree, usize, T) -> bool>) -> Callback<T> {
         Callback {
             callback: cb
         }
     }
 
-    pub fn fire(&self, arg: &mut T) {
-        (self.callback)(arg)
+    pub fn fire(&self, tree: &mut WidgetTree, index: usize, arg: T) -> bool {
+        (self.callback)(tree, index, arg)
+    }
+}
+
+impl<T> Default for Callback<T> {
+    fn default() -> Callback<T> {
+        Callback {
+            callback: Rc::new(|_, _, _| true),
+        }
     }
 }
 
@@ -43,11 +56,42 @@ pub struct WidgetState {
     size: Size,
     background: Image,
 
+    pub(crate) mouse_pressed_callback: Callback<MouseButton>,
+    pub(crate) mouse_released_callback: Callback<MouseButton>,
+    pub(crate) mouse_moved_callback: Callback<(f32, f32)>,
+    pub(crate) mouse_entered_callback: Callback<()>,
+    pub(crate) mouse_exited_callback: Callback<()>,
+
     pub(crate) index: usize,
     pub(crate) to_add: Vec<Box<dyn Widget>>,
 }
 
 impl WidgetState {
+    pub fn set_mouse_pressed_callback(&mut self, callback:
+                                      Rc<Fn(&mut WidgetTree, usize, MouseButton) -> bool>) {
+        self.mouse_pressed_callback = Callback::new(callback);
+    }
+
+    pub fn set_mouse_released_callback(&mut self, callback:
+                                       Rc<Fn(&mut WidgetTree, usize, MouseButton) -> bool>) {
+        self.mouse_released_callback = Callback::new(callback);
+    }
+
+    pub fn set_mouse_moved_callback(&mut self, callback:
+                                    Rc<Fn(&mut WidgetTree, usize, (f32, f32)) -> bool>) {
+        self.mouse_moved_callback = Callback::new(callback);
+    }
+
+    pub fn set_mouse_entered_callback(&mut self, callback:
+                                      Rc<Fn(&mut WidgetTree, usize, ()) -> bool>) {
+        self.mouse_entered_callback = Callback::new(callback);
+    }
+
+    pub fn set_mouse_exited_callback(&mut self, callback:
+                                     Rc<Fn(&mut WidgetTree, usize, ()) -> bool>) {
+        self.mouse_exited_callback = Callback::new(callback);
+    }
+
     pub(crate) fn draw(&self, renderer: &mut Renderer) {
         self.background.draw(renderer, self.position, self.size);
     }
@@ -96,15 +140,9 @@ pub trait Widget {
         self.state().draw(renderer);
     }
 
-    fn mouse_pressed(&mut self, _button: MouseButton) -> bool { false }
+    fn as_any(&self) -> &Any;
 
-    fn mouse_released(&mut self, _button: MouseButton) -> bool { false }
-
-    fn mouse_moved(&mut self, _x: f32, _y: f32) -> bool { false }
-
-    fn mouse_entered(&mut self) -> bool { false }
-
-    fn mouse_exited(&mut self) -> bool { false }
+    fn as_any_mut(&mut self) -> &mut Any;
 }
 
 impl Widget {
@@ -147,6 +185,10 @@ macro_rules! widget {
 
             fn kind(&self) -> &'static str { stringify!($name) }
 
+            fn as_any(&self) -> &Any { self }
+
+            fn as_any_mut(&mut self) -> &mut Any { self }
+
             $($fn_data)*
         }
     }
@@ -166,8 +208,7 @@ impl EmptyWidget {
 widget!{
     #[derive(Default)]
     pub struct Button {
-        text: String,
-        callbacks: Vec<Callback<Button>>
+        text: String
     }
 
     fn on_add(&mut self) {}
@@ -175,18 +216,6 @@ widget!{
     fn draw(&self, renderer: &mut Renderer) {
         self.state().draw(renderer);
         println!("{}", self.text);
-    }
-
-    fn mouse_pressed(&mut self, _button: MouseButton) -> bool{
-        let mut callbacks: Vec<_> = self.callbacks.drain(..).collect();
-
-        for cb in callbacks.iter() {
-            cb.fire(self);
-        }
-
-        self.callbacks.append(&mut callbacks);
-
-        true
     }
 }
 
@@ -196,10 +225,6 @@ impl Button {
             text,
             ..Default::default()
         }
-    }
-
-    pub fn add_callback(&mut self, cb: Box<Fn(&mut Button)>) {
-        self.callbacks.push(Callback::new(cb));
     }
 
     pub fn text(&self) -> &str {

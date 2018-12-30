@@ -14,9 +14,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
+use std::rc::Rc;
+
 use thrust_ui::input::{Cursor, Event, EventKind, MouseButton};
 use thrust_ui::widget_tree::WidgetTree;
-use thrust_ui::widget::{EmptyWidget, Button, Renderer};
+use thrust_ui::widget::{EmptyWidget, Button, Renderer, Widget};
 
 struct DefaultRenderer { }
 
@@ -30,8 +32,13 @@ fn main() {
 
     let root = tree.root().index();
     let mut button1 = Button::new("button1".to_string());
-    button1.add_callback(Box::new(|button| {
-        println!("Hello, world: {}", button.text());
+    button1.state_mut().set_mouse_pressed_callback(Rc::new(|tree, index, mouse_button| {
+        println!("Mouse Pressed, {:?}", mouse_button);
+
+        let button: &mut Button = tree.widget_mut(index);
+        println!("Text: {}", button.text());
+
+        true
     }));
     let button2 = Button::new("button2".to_string());
 

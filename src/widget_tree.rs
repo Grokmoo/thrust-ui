@@ -26,7 +26,6 @@ pub struct WidgetTree {
 
 struct TreeEntry {
     parent: usize,
-    widget: usize,
     children: Vec<usize>,
 }
 
@@ -51,13 +50,70 @@ impl WidgetTree {
 
         let root = TreeEntry {
             parent: 0,
-            widget: 0,
             children: Vec::new(),
         };
 
         WidgetTree {
             widgets,
             tree: vec![Some(root)],
+        }
+    }
+
+    /// Traverses the widget tree up, starting from the parent of `index` looking for a widget
+    /// with the specified concrete type `T`, returning the first one found.  If no such
+    /// widget is found, panics.  Panics if `index` is invalid
+    pub fn parent_mut<'a, T: Widget + 'static>(&'a mut self, index: usize) -> &'a mut T {
+        let index = self.tree(index).parent;
+        loop {
+            match self[index].as_any_mut().downcast_mut::<T>() {
+                None => (),
+                Some(widget) => return widget,
+            }
+
+            let new_index = self.tree(index).parent;
+
+            if new_index == index {
+                // this widget is its own parent, i.e. the root
+                panic!();
+            }
+        }
+    }
+
+    /// Traverses the widget tree up, starting from the parent of `index` looking for a widget
+    /// with the specified concrete type `T`, returning the first one found.  If no such
+    /// widget is found, panics.  Panics if `index` is invalid
+    pub fn parent<T: Widget + 'static>(&self, index: usize) -> &T {
+        let index = self.tree(index).parent;
+        loop {
+            match self[index].as_any().downcast_ref::<T>() {
+                None => (),
+                Some(widget) => return widget,
+            }
+
+            let new_index = self.tree(index).parent;
+
+            if new_index == index {
+                // this widget is its own parent, i.e. the root
+                panic!();
+            }
+        }
+    }
+
+    /// Returns the widget at the specified `index` downcast to the concrete type `T`.
+    /// Panics if the widget is not this type, or if the index is invalid.
+    pub fn widget_mut<T: Widget + 'static>(&mut self, index: usize) -> &mut T {
+        match self[index].as_any_mut().downcast_mut::<T>() {
+            None => panic!(),
+            Some(widget) => widget,
+        }
+    }
+
+    /// Returns the widget at the specified `index` downcast to the concrete type `T`.
+    /// Panics if the widget is not this type, or if the index is invalid.
+    pub fn widget<T: Widget + 'static>(&self, index: usize) -> &T {
+        match self[index].as_any().downcast_ref::<T>() {
+            None => panic!(),
+            Some(widget) => widget,
         }
     }
 
@@ -94,7 +150,7 @@ impl WidgetTree {
                 }
             }
 
-            if WidgetTree::fire_event(&mut self[index], event) {
+            if self.fire_event(index, event) {
                 return true;
             }
         }
@@ -102,17 +158,20 @@ impl WidgetTree {
         false
     }
 
-    fn fire_event(widget: &mut dyn Widget, event: &Event) -> bool {
+    fn fire_event(&mut self, index: usize, event: &Event) -> bool {
         use crate::input::EventKind::*;
         match &event.kind {
             MouseMoved { delta_x, delta_y } => {
-                widget.mouse_moved(*delta_x, *delta_y)
+                let cb = self[index].state().mouse_moved_callback.clone();
+                cb.fire(self, index, (*delta_x, *delta_y))
             },
             MousePressed { button } => {
-                widget.mouse_pressed(*button)
+                let cb = self[index].state().mouse_pressed_callback.clone();
+                cb.fire(self, index, *button)
             },
             MouseReleased { button } => {
-                widget.mouse_released(*button)
+                let cb = self[index].state().mouse_released_callback.clone();
+                cb.fire(self, index, *button)
             }
         }
     }
@@ -140,7 +199,6 @@ impl WidgetTree {
         self.widgets.push(Some(child));
         self.tree.push(Some(TreeEntry {
             parent: parent_index,
-            widget: child_index,
             children: Vec::new()
         }));
 

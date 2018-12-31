@@ -5,3 +5,6 @@ authors = ["Jared Stephen <grok_moo@yahoo.com>"]
 edition = "2018"
 
 [dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+log = "0.4"

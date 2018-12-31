@@ -17,6 +17,8 @@
 use std::any::Any;
 use std::rc::Rc;
 
+use serde_derive::Deserialize;
+
 use crate::widget_tree::WidgetTree;
 use crate::image::Image;
 use crate::input::{Cursor, MouseButton};
@@ -157,13 +159,15 @@ impl Widget {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Deserialize, Default, Debug, Clone, Copy)]
+#[serde(deny_unknown_fields, default)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Deserialize, Default, Debug, Clone, Copy)]
+#[serde(deny_unknown_fields, default)]
 pub struct Size {
     pub width: u32,
     pub height: u32,

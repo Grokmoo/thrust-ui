@@ -22,7 +22,9 @@ mod tests {
     }
 }
 
+pub mod color;
 pub mod image;
 pub mod input;
+pub mod theme;
 pub mod widget;
 pub mod widget_tree;

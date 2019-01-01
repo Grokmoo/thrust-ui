@@ -140,6 +140,8 @@ pub struct ThemeBuilder {
     foreground: Option<String>,
 
     custom: HashMap<String, String>,
+
+    children: HashMap<String, ThemeBuilder>,
 }
 
 impl ThemeBuilder {
@@ -177,6 +179,7 @@ const MAX_FROM_DEPTH: u32 = 10;
 
 impl ThemeBuilderSet {
     pub fn create_theme_set(mut self) -> Result<ThemeSet, Error> {
+        self.flatten_children()?;
         self.expand_from()?;
 
         let mut out = HashMap::new();
@@ -188,7 +191,40 @@ impl ThemeBuilderSet {
         Ok(ThemeSet::new(out))
     }
 
-    pub fn expand_from(&mut self) -> Result<(), Error> {
+    fn flatten_children(&mut self) -> Result<(), Error> {
+        let ids: Vec<_> = self.themes.keys().map(|k| k.to_string()).collect();
+
+        for id in ids {
+            self.flatten_children_recursive(id)?;
+        }
+
+        Ok(())
+    }
+
+    fn flatten_children_recursive(&mut self, id: String) -> Result<(), Error> {
+        let children: Vec<(String, ThemeBuilder)> =
+            self.themes.get_mut(&id).unwrap().children.drain().collect();
+
+        for (child_id, child) in children {
+            let new_id = format!("{}.{}", id, child_id);
+
+            if self.themes.contains_key(&new_id) {
+                return Err(Error::new(ErrorKind::InvalidInput,
+                                      format!("Computed ID '{}' is already present", new_id)));
+            }
+
+            self.themes.insert(new_id.clone(), child);
+
+            self.flatten_children_recursive(new_id)?;
+        }
+
+        Ok(())
+    }
+
+    fn expand_from(&mut self) -> Result<(), Error> {
+        // this set is different from the previous step as children have been added
+        let ids: Vec<_> = self.themes.keys().map(|k| k.to_string()).collect();
+
         // TODO more efficient method that doesn't clone the whole set
         // to satisfy the borrow checker.  should be possible with unsafe -
         // we need a mutable reference to a themes element and a shared
@@ -196,14 +232,13 @@ impl ThemeBuilderSet {
         // it should be ok
         let from_set = self.themes.clone();
 
-        let ids: Vec<_> = self.themes.keys().map(|k| k.to_string()).collect();
         for id in ids {
-            self.expand_item(&id, &from_set, 0)?;
+            self.expand_from_recursive(&id, &from_set, 0)?;
         }
         Ok(())
     }
 
-    pub fn expand_item(&mut self, id: &str,
+    fn expand_from_recursive(&mut self, id: &str,
                        from_set: &HashMap<String, ThemeBuilder>, depth: u32) -> Result<(), Error> {
         if depth > MAX_FROM_DEPTH {
             return Err(Error::new(ErrorKind::InvalidInput,
@@ -218,14 +253,14 @@ impl ThemeBuilderSet {
 
         let from = self.themes.get_mut(id).unwrap().from.take();
         if let Some(from) = from {
-            self.expand_item(&from, from_set, depth + 1)?;
+            self.expand_from_recursive(&from, from_set, depth + 1)?;
 
             ThemeBuilderSet::expand_from_theme(&mut self.themes.get_mut(id).unwrap(), &from_set[&from]);
         }
         Ok(())
     }
 
-    pub fn expand_from_theme(to: &mut ThemeBuilder, from: &ThemeBuilder) {
+    fn expand_from_theme(to: &mut ThemeBuilder, from: &ThemeBuilder) {
         to.layout = to.layout.or(from.layout);
         to.layout_spacing = to.layout_spacing.or(from.layout_spacing);
         to.border = to.border.or(from.border);

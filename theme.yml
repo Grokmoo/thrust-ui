@@ -4,18 +4,24 @@ themes:
     layout: Normal
     border: { top: 1, bottom: 1, left: 1, right: 1 }
     size: [10, 2]
-    position: [0, 0]
-    relative:
-      x: Zero
-      y: Max
-      width: Parent
-      height: Parent
-    text: "Hello"
-    text_params:
-      scale: 6.0
   label:
     border: { top: 1, bottom: 1, left: 1, right: 1 }
     text_params:
       font: Default
       scale: 5.0
       color: f00
+  scrollbar:
+    from: button
+    size: [5, 0]
+    relative:
+      height: Parent
+    children:
+      up:
+        from: button
+        size: [5, 5]
+        position: [0, 0]
+      down:
+        from: button
+        size: [5, 5]
+        relative:
+          y: Max

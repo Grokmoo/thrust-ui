@@ -20,6 +20,7 @@ use std::rc::Rc;
 use serde_derive::Deserialize;
 
 use crate::widget_tree::WidgetTree;
+use crate::theme::DEFAULT_THEME_ID;
 use crate::image::Image;
 use crate::input::{Cursor, MouseButton};
 
@@ -52,11 +53,12 @@ pub trait Renderer {
     fn render(&mut self);
 }
 
-#[derive(Default)]
 pub struct WidgetState {
+    theme_id: String,
     position: Point,
     size: Size,
     background: Image,
+    foreground: Image,
 
     pub(crate) mouse_pressed_callback: Callback<MouseButton>,
     pub(crate) mouse_released_callback: Callback<MouseButton>,
@@ -66,6 +68,26 @@ pub struct WidgetState {
 
     pub(crate) index: usize,
     pub(crate) to_add: Vec<Box<dyn Widget>>,
+}
+
+impl Default for WidgetState {
+    fn default() -> Self {
+        WidgetState {
+            theme_id: DEFAULT_THEME_ID.to_string(),
+            position: Point::default(),
+            size: Size::default(),
+            background: Image::default(),
+            foreground: Image::default(),
+
+            mouse_pressed_callback: Callback::default(),
+            mouse_released_callback: Callback::default(),
+            mouse_moved_callback: Callback::default(),
+            mouse_entered_callback: Callback::default(),
+            mouse_exited_callback: Callback::default(),
+            index: 0,
+            to_add: Vec::default(),
+        }
+    }
 }
 
 impl WidgetState {
@@ -96,6 +118,7 @@ impl WidgetState {
 
     pub(crate) fn draw(&self, renderer: &mut Renderer) {
         self.background.draw(renderer, self.position, self.size);
+        self.foreground.draw(renderer, self.position, self.size);
     }
 
     pub fn is_inside(&self, cursor: &Cursor) -> bool {
@@ -141,6 +164,8 @@ pub trait Widget {
     fn draw(&self, renderer: &mut Renderer) {
         self.state().draw(renderer);
     }
+
+    fn theme_id(&self) -> &str { &self.state().theme_id }
 
     fn as_any(&self) -> &Any;
 

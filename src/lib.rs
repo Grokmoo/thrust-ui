@@ -26,5 +26,6 @@ pub mod color;
 pub mod image;
 pub mod input;
 pub mod theme;
+pub mod theme_builder;
 pub mod widget;
 pub mod widget_tree;

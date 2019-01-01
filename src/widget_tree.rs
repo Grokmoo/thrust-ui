@@ -14,14 +14,17 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use crate::input::{Event};
+use crate::theme::{Theme, DEFAULT_THEME_ID};
 use crate::widget::{Renderer, Widget};
 
 pub struct WidgetTree {
     widgets: Vec<Option<Box<dyn Widget>>>,
     tree: Vec<Option<TreeEntry>>,
+    themes: HashMap<String, Theme>,
 }
 
 struct TreeEntry {
@@ -53,9 +56,20 @@ impl WidgetTree {
             children: Vec::new(),
         };
 
+        let mut themes = HashMap::new();
+        themes.insert(DEFAULT_THEME_ID.to_string(), Theme::default());
+
         WidgetTree {
             widgets,
             tree: vec![Some(root)],
+            themes,
+        }
+    }
+
+    pub fn theme(&self, id: &str) -> &Theme {
+        match self.themes.get(id) {
+            None => self.themes.get(DEFAULT_THEME_ID).as_ref().unwrap(),
+            Some(theme) => theme,
         }
     }
 

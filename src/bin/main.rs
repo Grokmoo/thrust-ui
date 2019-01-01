@@ -14,9 +14,12 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
+use std::io::{Error, ErrorKind};
+use std::fs::File;
 use std::rc::Rc;
 
 use thrust_ui::input::{Cursor, Event, EventKind, MouseButton};
+use thrust_ui::theme_builder::ThemeBuilderSet;
 use thrust_ui::widget_tree::WidgetTree;
 use thrust_ui::widget::{EmptyWidget, Button, Renderer, Widget};
 
@@ -26,7 +29,14 @@ impl Renderer for DefaultRenderer {
     fn render(&mut self) { }
 }
 
-fn main() {
+fn main() -> Result<(), Error> {
+    let theme_file = File::open("theme.yml")?;
+    let theme_builder: ThemeBuilderSet = serde_yaml::from_reader(theme_file).
+        map_err(|err| Error::new(ErrorKind::InvalidInput, err.to_string()))?;
+    let theme = theme_builder.create_theme_set()?;
+
+    println!("{:#?}", theme);
+
     let mut tree = WidgetTree::new(EmptyWidget::new());
     let mut renderer = DefaultRenderer { };
 
@@ -53,4 +63,6 @@ fn main() {
     tree.draw(&mut renderer);
 
     tree.handle_event(evt);
+
+    Ok(())
 }

@@ -1,27 +1,33 @@
 themes:
+  root:
+    relative:
+      width: Parent
+      height: Parent
+    children:
+      side_panel:
+        kind: Container
+        size: [50, 0]
+        relative:
+          height: Parent
+        border: { top: 1, bottom: 1, left: 1, right: 1 }
+        children:
+          box_level2:
+            kind: Container
+            children:
+              button1:
+                from: button
+              button2:
+                from: button
   button:
     from: label
-    layout: Normal
+    kind: Ref
     border: { top: 1, bottom: 1, left: 1, right: 1 }
     size: [10, 2]
+    text: "button test"
   label:
+    kind: Ref
     border: { top: 1, bottom: 1, left: 1, right: 1 }
     text_params:
       font: Default
       scale: 5.0
       color: f00
-  scrollbar:
-    from: button
-    size: [5, 0]
-    relative:
-      height: Parent
-    children:
-      up:
-        from: button
-        size: [5, 5]
-        position: [0, 0]
-      down:
-        from: button
-        size: [5, 5]
-        relative:
-          y: Max

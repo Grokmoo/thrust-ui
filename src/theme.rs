@@ -139,9 +139,22 @@ pub struct Border {
 
 pub const DEFAULT_THEME_ID: &'static str = "default";
 
+#[derive(Deserialize, Debug, Copy, Clone)]
+pub enum Kind {
+    Ref, // a reference to a widget that will be added in rust code, or
+         // simply used as a building block for another theme item
+    Label, // a widget showing static text - defined purely in the theme
+    Container, // a widget holding other widgets - defined purely in the theme
+}
+
+impl Default for Kind {
+    fn default() -> Self { Kind::Ref }
+}
+
 #[derive(Debug)]
 pub struct Theme {
     pub id: String,
+    pub kind: Kind,
     pub layout: LayoutKind,
     pub layout_spacing: Border,
     pub border: Border,
@@ -155,6 +168,9 @@ pub struct Theme {
     pub foreground: Option<String>,
 
     pub custom: HashMap<String, String>,
+
+    pub parent: Option<String>,
+    pub children: Vec<String>,
 }
 
 impl Default for Theme {
@@ -172,6 +188,9 @@ impl Default for Theme {
             background: None,
             foreground: None,
             custom: HashMap::default(),
+            children: Vec::default(),
+            kind: Kind::default(),
+            parent: None,
         }
     }
 }
@@ -185,6 +204,17 @@ impl ThemeSet {
     pub(crate) fn new(themes: HashMap<String, Theme>) -> ThemeSet {
         ThemeSet {
             themes,
+        }
+    }
+
+    pub fn contains(&self, id: &str) -> bool {
+        self.themes.contains_key(id)
+    }
+
+    pub fn get(&self, id: &str) -> &Theme {
+        match self.themes.get(id) {
+            None => &self.themes[DEFAULT_THEME_ID],
+            Some(theme) => theme,
         }
     }
 }

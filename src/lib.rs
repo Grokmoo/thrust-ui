@@ -14,18 +14,46 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+#[macro_export]
+macro_rules! widget {
+    ($(#[$attr:meta])* pub struct $name:ident { $($id:ident: $ty:ty),* }
+     $($fn_data:tt)*) => {
+        $(#[$attr])*
+        pub struct $name {
+            state: WidgetState,
+            $( $id: $ty ),*
+        }
+
+        impl Widget for $name {
+            fn state(&self) -> &WidgetState { &self.state }
+
+            fn state_mut(&mut self) -> &mut WidgetState { &mut self.state }
+
+            fn kind(&self) -> &'static str { stringify!($name) }
+
+            fn as_any(&self) -> &Any { self }
+
+            fn as_any_mut(&mut self) -> &mut Any { self }
+
+            $($fn_data)*
+        }
+
+        impl $name {
+            pub fn set_theme<S: Into<String>>(&mut self, id: S) {
+                let id = id.into();
+                self.state_mut().theme_partial_id = id.clone();
+                self.state_mut().theme_full_id = id;
+            }
+        }
     }
 }
 
+pub mod widget;
+pub mod button;
 pub mod color;
 pub mod image;
 pub mod input;
+pub mod label;
 pub mod theme;
 pub mod theme_builder;
-pub mod widget;
 pub mod widget_tree;

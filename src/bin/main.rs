@@ -21,7 +21,8 @@ use std::rc::Rc;
 use thrust_ui::input::{Cursor, Event, EventKind, MouseButton};
 use thrust_ui::theme_builder::ThemeBuilderSet;
 use thrust_ui::widget_tree::WidgetTree;
-use thrust_ui::widget::{EmptyWidget, Button, Renderer, Widget};
+use thrust_ui::widget::{EmptyWidget, Renderer, Widget};
+use thrust_ui::button::Button;
 
 struct DefaultRenderer { }
 
@@ -35,13 +36,14 @@ fn main() -> Result<(), Error> {
         map_err(|err| Error::new(ErrorKind::InvalidInput, err.to_string()))?;
     let theme = theme_builder.create_theme_set()?;
 
-    println!("{:#?}", theme);
-
-    let mut tree = WidgetTree::new(EmptyWidget::new());
+    let mut root_widget = EmptyWidget::new();
+    root_widget.set_theme("root");
+    let mut tree = WidgetTree::new(root_widget, theme);
     let mut renderer = DefaultRenderer { };
 
     let root = tree.root().index();
     let mut button1 = Button::new("button1".to_string());
+    button1.set_theme("button1");
     button1.state_mut().set_mouse_pressed_callback(Rc::new(|tree, index, mouse_button| {
         println!("Mouse Pressed, {:?}", mouse_button);
 
@@ -50,7 +52,8 @@ fn main() -> Result<(), Error> {
 
         true
     }));
-    let button2 = Button::new("button2".to_string());
+    let mut button2 = Button::new("button2".to_string());
+    button2.set_theme("button2");
 
     tree.add_child(root, button1);
     tree.add_child(root, button2);

@@ -22,8 +22,7 @@ use serde::{Deserialize, Deserializer};
 use serde_derive::Deserialize;
 
 use crate::color::Color;
-use crate::theme::{HorizontalAlignment, VerticalAlignment, SizeRelative, PositionRelative,
-    LayoutKind, Border, ThemeSet, Theme, TextParams, Relative};
+use crate::theme::*;
 use crate::widget::{Size, Point};
 
 #[derive(Deserialize, Default, Debug, Clone, Copy)]
@@ -124,9 +123,10 @@ where D:Deserializer<'de> {
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeBuilder {
     from: Option<String>,
+    kind: Option<Kind>,
     layout: Option<LayoutKind>,
     layout_spacing: Option<Border>,
     border: Option<Border>,
@@ -139,9 +139,16 @@ pub struct ThemeBuilder {
     background: Option<String>,
     foreground: Option<String>,
 
+    #[serde(default)]
     custom: HashMap<String, String>,
 
+    #[serde(default)]
     children: HashMap<String, ThemeBuilder>,
+
+    #[serde(skip)]
+    children_ids: Vec<String>,
+    #[serde(skip)]
+    parent_id: Option<String>,
 }
 
 impl ThemeBuilder {
@@ -165,6 +172,9 @@ impl ThemeBuilder {
             background: self.background,
             foreground: self.foreground,
             custom: self.custom,
+            kind: self.kind.unwrap_or_default(),
+            children: self.children_ids,
+            parent: self.parent_id,
         }
     }
 }
@@ -188,6 +198,9 @@ impl ThemeBuilderSet {
             out.insert(id_clone, builder.build(id));
         }
 
+        // the default theme in the default location to look
+        out.insert(DEFAULT_THEME_ID.to_string(), Theme::default());
+
         Ok(ThemeSet::new(out))
     }
 
@@ -205,7 +218,7 @@ impl ThemeBuilderSet {
         let children: Vec<(String, ThemeBuilder)> =
             self.themes.get_mut(&id).unwrap().children.drain().collect();
 
-        for (child_id, child) in children {
+        for (child_id, mut child) in children {
             let new_id = format!("{}.{}", id, child_id);
 
             if self.themes.contains_key(&new_id) {
@@ -213,7 +226,10 @@ impl ThemeBuilderSet {
                                       format!("Computed ID '{}' is already present", new_id)));
             }
 
+            child.parent_id = Some(id.clone());
             self.themes.insert(new_id.clone(), child);
+
+            self.themes.get_mut(&id).unwrap().children_ids.push(new_id.clone());
 
             self.flatten_children_recursive(new_id)?;
         }
@@ -225,21 +241,13 @@ impl ThemeBuilderSet {
         // this set is different from the previous step as children have been added
         let ids: Vec<_> = self.themes.keys().map(|k| k.to_string()).collect();
 
-        // TODO more efficient method that doesn't clone the whole set
-        // to satisfy the borrow checker.  should be possible with unsafe -
-        // we need a mutable reference to a themes element and a shared
-        // reference at the same time, but as long as they aren't equal
-        // it should be ok
-        let from_set = self.themes.clone();
-
         for id in ids {
-            self.expand_from_recursive(&id, &from_set, 0)?;
+            self.expand_from_recursive(&id, 0)?;
         }
         Ok(())
     }
 
-    fn expand_from_recursive(&mut self, id: &str,
-                       from_set: &HashMap<String, ThemeBuilder>, depth: u32) -> Result<(), Error> {
+    fn expand_from_recursive(&mut self, id: &str, depth: u32) -> Result<(), Error> {
         if depth > MAX_FROM_DEPTH {
             return Err(Error::new(ErrorKind::InvalidInput,
                                   format!("From reference depth exceeds max of {}. This is most\
@@ -253,9 +261,15 @@ impl ThemeBuilderSet {
 
         let from = self.themes.get_mut(id).unwrap().from.take();
         if let Some(from) = from {
-            self.expand_from_recursive(&from, from_set, depth + 1)?;
+            self.expand_from_recursive(&from, depth + 1)?;
 
-            ThemeBuilderSet::expand_from_theme(&mut self.themes.get_mut(id).unwrap(), &from_set[&from]);
+            // TODO more efficient method that doesn't clone the whole set
+            // to satisfy the borrow checker.  should be possible with unsafe -
+            // we need a mutable reference to a themes element and a shared
+            // reference at the same time, but as long as they aren't equal
+            // it should be ok
+            let from_theme = self.themes[&from].clone();
+            ThemeBuilderSet::expand_from_theme(&mut self.themes.get_mut(id).unwrap(), &from_theme);
         }
         Ok(())
     }
@@ -266,6 +280,7 @@ impl ThemeBuilderSet {
         to.border = to.border.or(from.border);
         to.size = to.size.or(from.size);
         to.position = to.position.or(from.position);
+        to.kind = to.kind.or(from.kind);
 
         if to.text.is_none() { to.text = from.text.clone(); }
         if to.background.is_none() { to.background = from.background.clone(); }

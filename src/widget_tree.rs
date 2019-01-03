@@ -14,19 +14,20 @@
 //  You should have received a copy of the GNU General Public License
 //  along with thrust-ui.  If not, see <http://www.gnu.org/licenses/>
 
-use std::collections::HashMap;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use crate::input::{Event};
-use crate::theme::{Theme, DEFAULT_THEME_ID};
-use crate::widget::{Renderer, Widget};
+use crate::theme::{Theme, ThemeSet, Kind};
+use crate::widget::{Renderer, Widget, EmptyWidget};
+use crate::label::Label;
 
 pub struct WidgetTree {
     widgets: Vec<Option<Box<dyn Widget>>>,
     tree: Vec<Option<TreeEntry>>,
-    themes: HashMap<String, Theme>,
+    themes: ThemeSet,
 }
 
+#[derive(Debug)]
 struct TreeEntry {
     parent: usize,
     children: Vec<usize>,
@@ -47,30 +48,22 @@ impl IndexMut<usize> for WidgetTree {
 }
 
 impl WidgetTree {
-    pub fn new<T: Widget + 'static>(root: T) -> WidgetTree {
-        let mut widgets: Vec<Option<Box<dyn Widget>>> = Vec::new();
-        widgets.push(Some(Box::new(root)));
-
-        let root = TreeEntry {
-            parent: 0,
-            children: Vec::new(),
+    pub fn new<T: Widget + 'static>(root: T, themes: ThemeSet) -> WidgetTree {
+        let mut tree = WidgetTree {
+            widgets: Vec::new(),
+            tree: Vec::new(),
+            themes,
         };
 
-        let mut themes = HashMap::new();
-        themes.insert(DEFAULT_THEME_ID.to_string(), Theme::default());
+        let mut root = Box::new(root);
+        root.state_mut().index = 0;
+        tree.add_child_internal(0, 0, root);
 
-        WidgetTree {
-            widgets,
-            tree: vec![Some(root)],
-            themes,
-        }
+        tree
     }
 
     pub fn theme(&self, id: &str) -> &Theme {
-        match self.themes.get(id) {
-            None => self.themes.get(DEFAULT_THEME_ID).as_ref().unwrap(),
-            Some(theme) => theme,
-        }
+        self.themes.get(id)
     }
 
     /// Traverses the widget tree up, starting from the parent of `index` looking for a widget
@@ -199,21 +192,61 @@ impl WidgetTree {
         self.add_child_boxed(parent_index, Box::new(child));
     }
 
-    fn add_child_boxed(&mut self, parent_index: usize, mut child: Box<dyn Widget>) {
+    // Finds the parent index for the specified child inside the specified parent.  As the
+    // theme can define widgets that we have not defined in code, this may not be the parent
+    // directly, but instead one of its children
+    fn find_theme_parent_index(&self, parent_index: usize,
+                               child: &mut dyn Widget) -> Option<usize> {
         if parent_index >= self.widgets.len() {
             // TODO error message
             panic!();
         }
 
+        let parent = match &self.widgets[parent_index] {
+            None => {
+                // TODO error message for invalid parent
+                panic!();
+            }, Some(widget) => widget,
+        };
+
+        let full_id = format!("{}.{}", parent.theme_id(), child.theme_partial_id());
+        if self.themes.contains(&full_id) {
+            println!("Set full theme id {}", full_id);
+            child.set_full_theme_id(full_id);
+            return Some(parent_index);
+        }
+
+        for index in self.tree[parent_index].as_ref().unwrap().children.iter() {
+            if let Some(parent_index) = self.find_theme_parent_index(*index, child) {
+                return Some(parent_index);
+            }
+        }
+
+        None
+    }
+
+    fn add_child_boxed(&mut self, mut parent_index: usize, mut child: Box<dyn Widget>) {
+        match self.find_theme_parent_index(parent_index, child.deref_mut()) {
+            None => {
+                println!("Unable to find valid theme for {}", child.theme_id());
+                // TODO warn for no valid parent, but continue with default
+            }, Some(index) => parent_index = index,
+        }
+
+        self.add_child_known_parent(parent_index, child);
+    }
+
+    fn add_child_known_parent(&mut self, parent_index: usize, mut child: Box<dyn Widget>) {
         let child_index = self.widgets.len();
         child.state_mut().index = child_index;
+        self.tree[parent_index].as_mut().unwrap().children.push(child_index);
+        self.add_child_internal(parent_index, child_index, child);
+    }
 
-        if let Some(ref mut tree_entry) = self.tree[parent_index] {
-            tree_entry.children.push(child_index);
-        } else {
-            // TODO error message
-            panic!();
-        }
+    fn add_child_internal(&mut self, parent_index: usize, child_index: usize,
+                          child: Box<dyn Widget>) {
+        let child_theme_id = child.theme_id().to_string();
+        println!("Add child '{}' to {}", child_theme_id, parent_index);
 
         self.widgets.push(Some(child));
         self.tree.push(Some(TreeEntry {
@@ -223,9 +256,29 @@ impl WidgetTree {
 
         self[child_index].on_add();
 
+        // add custom children that have been added in code recursively
         let to_add: Vec<_> = self[child_index].state_mut().to_add.drain(..).collect();
         for child in to_add {
             self.add_child_boxed(child_index, child);
+        }
+
+        // add theme defined 'dumb' children recursively
+        let children = self.themes.get(&child_theme_id).children.clone();
+        for child_id in children {
+            let theme = self.themes.get(&child_id);
+            match theme.kind {
+                Kind::Label => {
+                    let mut label = Label::new("".to_string());
+                    label.set_theme(theme.id.deref());
+                    self.add_child_known_parent(parent_index, Box::new(label));
+                },
+                Kind::Container => {
+                    let mut widget = EmptyWidget::new();
+                    widget.set_theme(theme.id.deref());
+                    self.add_child_known_parent(parent_index, Box::new(widget));
+                },
+                Kind::Ref => (),
+            }
         }
     }
 

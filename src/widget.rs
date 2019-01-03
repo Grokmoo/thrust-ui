@@ -54,7 +54,8 @@ pub trait Renderer {
 }
 
 pub struct WidgetState {
-    theme_id: String,
+    pub(crate) theme_full_id: String,
+    pub(crate) theme_partial_id: String,
     position: Point,
     size: Size,
     background: Image,
@@ -73,7 +74,8 @@ pub struct WidgetState {
 impl Default for WidgetState {
     fn default() -> Self {
         WidgetState {
-            theme_id: DEFAULT_THEME_ID.to_string(),
+            theme_full_id: DEFAULT_THEME_ID.to_string(),
+            theme_partial_id: DEFAULT_THEME_ID.to_string(),
             position: Point::default(),
             size: Size::default(),
             background: Image::default(),
@@ -165,7 +167,13 @@ pub trait Widget {
         self.state().draw(renderer);
     }
 
-    fn theme_id(&self) -> &str { &self.state().theme_id }
+    fn theme_id(&self) -> &str { &self.state().theme_full_id }
+
+    fn theme_partial_id(&self) -> &str { &self.state().theme_partial_id }
+
+    fn set_full_theme_id(&mut self, id: String) {
+        self.state_mut().theme_full_id = id;
+    }
 
     fn as_any(&self) -> &Any;
 
@@ -198,30 +206,6 @@ pub struct Size {
     pub height: u32,
 }
 
-macro_rules! widget {
-    ($(#[$attr:meta])* pub struct $name:ident { $($id:ident: $ty:ty),* }
-     $($fn_data:tt)*) => {
-        $(#[$attr])*
-        pub struct $name {
-            state: WidgetState,
-            $( $id: $ty ),*
-        }
-
-        impl Widget for $name {
-            fn state(&self) -> &WidgetState { &self.state }
-
-            fn state_mut(&mut self) -> &mut WidgetState { &mut self.state }
-
-            fn kind(&self) -> &'static str { stringify!($name) }
-
-            fn as_any(&self) -> &Any { self }
-
-            fn as_any_mut(&mut self) -> &mut Any { self }
-
-            $($fn_data)*
-        }
-    }
-}
 
 widget!{
     #[derive(Default)]
@@ -231,32 +215,5 @@ widget!{
 impl EmptyWidget {
     pub fn new() -> EmptyWidget {
         EmptyWidget::default()
-    }
-}
-
-widget!{
-    #[derive(Default)]
-    pub struct Button {
-        text: String
-    }
-
-    fn on_add(&mut self) {}
-
-    fn draw(&self, renderer: &mut Renderer) {
-        self.state().draw(renderer);
-        println!("{}", self.text);
-    }
-}
-
-impl Button {
-    pub fn new(text: String) -> Button {
-        Button {
-            text,
-            ..Default::default()
-        }
-    }
-
-    pub fn text(&self) -> &str {
-        &self.text
     }
 }
